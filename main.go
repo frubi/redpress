@@ -67,9 +67,9 @@ func main() {
 	// Async transmission of ICMP packets
 	go send(peers, conn, config.ProbeInterval)
 
-	// Delay reporting by 3 seconds. Otherwise the reports will generate at the
-	// same time as the last send.
-	time.Sleep(3 * time.Second)
+	// Delay reporting by half the probe interval. Otherwise the reports will
+	// generate at the same time as the last send.
+	time.Sleep(time.Duration(config.ProbeInterval / 2) * time.Second)
 
 	ticker := time.Tick(time.Duration(config.ReportInterval) * time.Second)
 
