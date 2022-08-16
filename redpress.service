@@ -1,0 +1,14 @@
+[Unit]
+Description=Redpress – Watch the quality of your internet service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/redpress
+ExecStart=/home/pi/redpress/redpress config.yaml
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
