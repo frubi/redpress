@@ -1,2 +1,5 @@
 redpress
 redpress-*.tsv
+
+config*.yaml
+!config_example.yaml

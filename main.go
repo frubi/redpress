@@ -6,8 +6,11 @@ import (
 	"os"
 	"time"
 
-	"golang.org/x/net/icmp"
 	"crypto/rand"
+	"golang.org/x/net/icmp"
+
+	"github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api/write"
 )
 
 func main() {
@@ -21,6 +24,14 @@ func main() {
 	config, err := LoadConfig(os.Args[1])
 	if err != nil {
 		fmt.Println("Failed to load configuration:", err)
+		return
+	}
+
+	// Get the local hostname to allow a better differentiation in the
+	// recorded data
+	source, err := os.Hostname()
+	if err != nil {
+		fmt.Println("Failed to get local hostname:", err)
 		return
 	}
 
@@ -40,6 +51,7 @@ func main() {
 
 		peer.Addr = addr
 		peer.LastReset = startupTime
+		peer.Transmit = make([]time.Time, 16)
 
 		peer.Payload = make([]byte, 16)
 		rand.Read(peer.Payload)
@@ -53,6 +65,26 @@ func main() {
 		return
 	}
 
+	points := make(chan *write.Point)
+
+	if config.Influxdb != nil {
+		client := influxdb2.NewClient(config.Influxdb.Url, config.Influxdb.Token)
+		defer client.Close()
+
+		write := client.WriteAPI(config.Influxdb.Org, config.Influxdb.Bucket)
+		go func() {
+			for p := range points {
+				p.AddTag("source", source)
+				write.WritePoint(p)
+			}
+		}()
+	} else {
+		go func() {
+			for range points {
+			}
+		}()
+	}
+
 	// Create "connection" to send/receivce packets
 	conn, err := icmp.ListenPacket("udp4", "0.0.0.0")
 	if err != nil {
@@ -61,15 +93,17 @@ func main() {
 	}
 	defer conn.Close()
 
+	fmt.Println("Redpress -- Startup complete :)")
+
 	// Async reception of ICMP packets
-	go recv(peers, conn)
+	go recv(peers, conn, points)
 
 	// Async transmission of ICMP packets
 	go send(peers, conn, config.ProbeInterval)
 
 	// Delay reporting by half the probe interval. Otherwise the reports will
 	// generate at the same time as the last send.
-	time.Sleep(time.Duration(config.ProbeInterval / 2) * time.Second)
+	time.Sleep(time.Duration(config.ProbeInterval/2) * time.Second)
 
 	ticker := time.Tick(time.Duration(config.ReportInterval) * time.Second)
 
@@ -88,6 +122,15 @@ func main() {
 				peer.RecvInOrder, peer.RecvOutOfOrder,
 				lost)
 
+			p := influxdb2.NewPointWithMeasurement("reach").
+				AddTag("host", peer.Addr.String()).
+				AddField("send", peer.Send).
+				AddField("recv", peer.RecvInOrder).
+				AddField("delayed", peer.RecvOutOfOrder).
+				AddField("lost", lost).
+				SetTime(t)
+			points <- p
+
 			peer.Send = 0
 			peer.RecvInOrder = 0
 			peer.RecvOutOfOrder = 0
@@ -100,6 +143,5 @@ func main() {
 			fmt.Fprintln(output, line)
 		}
 	}
-
 
 }

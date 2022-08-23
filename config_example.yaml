@@ -1,0 +1,17 @@
+# List of used hosts for ping probing
+hosts: [ 172.19.212.1, 8.8.8.8 ]
+
+# Interval of ping requests sends
+probeinterval: 3
+
+# Interval of reports generated. This should be dividable by 3600, so that the
+# reports can be aligned by the hour.
+reportinterval: 300
+
+# Configuration of connection to InfluxDB. This block can be omitted, this disables
+# the reporting of current values to InfluxDB.
+influxdb:
+  bucket: redpress
+  org: home
+  token: <token>
+  url: <url>

@@ -10,8 +10,10 @@ import (
 
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
-)
 
+	"github.com/influxdata/influxdb-client-go/v2"
+	"github.com/influxdata/influxdb-client-go/v2/api/write"
+)
 
 type Peer struct {
 	// Mutex used for locking this struct
@@ -23,6 +25,8 @@ type Peer struct {
 	Seq uint16
 	// Random payload used for identification
 	Payload []byte
+	// Time of the last transmit
+	Transmit []time.Time
 
 	// Last reset of packets numbers
 	LastReset time.Time
@@ -36,7 +40,6 @@ type Peer struct {
 
 type Peers []*Peer
 
-
 // Find matching peer by IP address
 func (peers Peers) Lookup(addr net.IP) *Peer {
 	for _, peer := range peers {
@@ -48,7 +51,6 @@ func (peers Peers) Lookup(addr net.IP) *Peer {
 	return nil
 }
 
-
 func send(peers Peers, conn *icmp.PacketConn, interval int) {
 	ticker := time.Tick(time.Duration(interval) * time.Second)
 
@@ -58,8 +60,13 @@ func send(peers Peers, conn *icmp.PacketConn, interval int) {
 		for _, peer := range peers {
 			// Safe update of send numbers
 			peer.Lock()
+
 			peer.Seq++
 			seq := peer.Seq
+
+			copy(peer.Transmit, peer.Transmit[1:])
+			peer.Transmit[len(peer.Transmit)-1] = t
+
 			peer.Send++
 			peer.Unlock()
 
@@ -92,8 +99,7 @@ func send(peers Peers, conn *icmp.PacketConn, interval int) {
 
 }
 
-
-func recv(peers Peers, conn *icmp.PacketConn) {
+func recv(peers Peers, conn *icmp.PacketConn, points chan *write.Point) {
 	pkt := make([]byte, 1500)
 
 	for {
@@ -140,7 +146,7 @@ func recv(peers Peers, conn *icmp.PacketConn) {
 			continue
 		}
 
-		fmt.Printf("%s <- Receive\n", peer.Addr.String())
+		var tx time.Time
 
 		peer.Lock()
 		if peer.Seq == uint16(reply.Seq) {
@@ -148,6 +154,29 @@ func recv(peers Peers, conn *icmp.PacketConn) {
 		} else {
 			peer.RecvOutOfOrder++
 		}
+
+		delta := int(peer.Seq) - reply.Seq
+		if delta < 0 {
+			delta += 0x10001
+		}
+		if delta < len(peer.Transmit) {
+			tx = peer.Transmit[len(peer.Transmit)-delta-1]
+
+		}
+
 		peer.Unlock()
+
+		if tx.IsZero() == false {
+			rx := time.Now()
+			delay := rx.Sub(tx)
+
+			p := influxdb2.NewPointWithMeasurement("rtt").
+				AddTag("host", peer.Addr.String()).
+				AddField("rtt", delay.Milliseconds()).
+				SetTime(rx)
+			points <- p
+		}
+
+		fmt.Printf("%s <- Receive\n", peer.Addr.String())
 	}
 }
