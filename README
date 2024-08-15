@@ -1,0 +1,6 @@
+Redpress – Watch the quality of your internet service 🔍
+
+This tools sends regular ICMP ping requests to configurable list of IP
+addresses. This can be set to a list of popular, high reliable sites to
+watch the quality of your home internet service and detect high-loss and/or
+high-latency phase.
