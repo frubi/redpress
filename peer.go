@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,7 +52,7 @@ func (peers Peers) Lookup(addr net.IP) *Peer {
 	return nil
 }
 
-func send(peers Peers, conn *icmp.PacketConn, interval int) {
+func send(peers Peers, conn *icmp.PacketConn, interval int, unpriv bool) {
 	ticker := time.Tick(time.Duration(interval) * time.Second)
 
 	for t := range ticker {
@@ -86,10 +87,19 @@ func send(peers Peers, conn *icmp.PacketConn, interval int) {
 				os.Exit(2)
 			}
 
+			// The provided dst must be net.UDPAddr when c is a non-privileged
+			// datagram-oriented ICMP endpoint. Otherwise it must be net.IPAddr.
+			var addr net.Addr
+			if unpriv {
+				addr = &net.UDPAddr{IP: peer.Addr}
+			} else {
+				addr = &net.IPAddr{IP: peer.Addr}
+			}
+
 			fmt.Printf("%s -> Send %s\n", peer.Addr.String(), now)
 
 			// Transmit ICMP package
-			_, err = conn.WriteTo(pkt, &net.UDPAddr{IP: peer.Addr})
+			_, err = conn.WriteTo(pkt, addr)
 			if err != nil {
 				fmt.Println("Failed to send ICMP packet:", err)
 				os.Exit(2)
@@ -109,12 +119,7 @@ func recv(peers Peers, conn *icmp.PacketConn, points chan *write.Point) {
 			os.Exit(1)
 		}
 
-		remoteName, _, err := net.SplitHostPort(from.String())
-		if err != nil {
-			fmt.Println("Failed to resolve remote addr:", err)
-			os.Exit(1)
-		}
-
+		remoteName := strings.TrimSuffix(from.String(), ":0")
 		remoteAddr := net.ParseIP(remoteName)
 		if remoteAddr == nil {
 			fmt.Println("Failed to resolve remote addr: parse IP failed")

@@ -8,8 +8,13 @@ probeinterval: 3
 # reports can be aligned by the hour.
 reportinterval: 300
 
-# Configuration of connection to InfluxDB. This block can be omitted, this disables
-# the reporting of current values to InfluxDB.
+# Use unprivileged socket for sending ICMP requests. Only supported on Linux
+# and Darwin. On Linux, it muss be enabled for the running user with system
+# variable "net.ipv4.ping_group_range".
+unprivileged: true
+
+# Configuration of connection to InfluxDB. This block can be omitted, this
+# disables the reporting of current values to InfluxDB.
 influxdb:
   bucket: redpress
   org: home

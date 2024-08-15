@@ -35,6 +35,24 @@ func main() {
 		return
 	}
 
+	// Create "connection" to send/receivce packets
+	var conn *icmp.PacketConn
+
+	if config.Unprivileged {
+		conn, err = icmp.ListenPacket("udp4", "0.0.0.0")
+		if err != nil {
+			fmt.Println("Failed to listen unprivileged for ICMP packets:", err)
+			return
+		}
+	} else {
+		conn, err = icmp.ListenPacket("ip4:icmp", "0.0.0.0")
+		if err != nil {
+			fmt.Println("Failed to listen privileged for ICMP packets:", err)
+			return
+		}
+	}
+	defer conn.Close()
+
 	// Use startup time as first reset time
 	startupTime := time.Now()
 
@@ -85,21 +103,13 @@ func main() {
 		}()
 	}
 
-	// Create "connection" to send/receivce packets
-	conn, err := icmp.ListenPacket("udp4", "0.0.0.0")
-	if err != nil {
-		fmt.Println("Failed to listen for ICMP packets:", err)
-		return
-	}
-	defer conn.Close()
-
 	fmt.Println("Redpress -- Startup complete :)")
 
 	// Async reception of ICMP packets
 	go recv(peers, conn, points)
 
 	// Async transmission of ICMP packets
-	go send(peers, conn, config.ProbeInterval)
+	go send(peers, conn, config.ProbeInterval, config.Unprivileged)
 
 	// Delay reporting by half the probe interval. Otherwise the reports will
 	// generate at the same time as the last send.

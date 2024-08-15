@@ -15,6 +15,9 @@ type Config struct {
 	// that the reports can be aligned by the hour.
 	ReportInterval int
 
+	// Use an unprivileged socket
+	Unprivileged bool
+
 	// Pointer to InfluxDB configuration block. This block may be empty, if
 	// no export to InfluxDB is wanted.
 	Influxdb *Influx
